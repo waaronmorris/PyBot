@@ -178,6 +178,8 @@ def encoder_rnn(rnn_inputs, rnn_size, num_layers, keep_prob, sequence_length):
     return encoder_state
             
 # Decoding the training set 
+# Still to do: Update this section on decoding the training set. These classes are deprecated with TF 1.8/1.9...
+
 def decode_training_set(encoder_state, decoder_cell, decoder_embedded_input, sequence_length, decoding_scope, output_function, keep_prob, batch_size):
     attention_states = tf.zeros([batch_size,1,decoder_cell.output_size]) # initialize
     attention_keys, attention_values, attention_score_function, attention_construct_function = tf.contrib.seq2seq.prepare_attention(attention_states, 
