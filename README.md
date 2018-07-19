@@ -1,5 +1,5 @@
 # Chatbot  
-This repo contains two chatbots. One is trained on a dataset from Reddit while the other is trained on a dataset of movie quotes from Cornell (DSBot). This is being initially based on the tutorial from Kirill Eremenko and Hadelin de Ponteves. Initially they engineered their model with TensorFlow 1.0. I will be updating the model along the way in light of updates and deprecated classes. <br/>
+This repo contains two chatbots. One is trained on a dataset from Reddit while the other is trained on a dataset of movie quotes from Cornell (DSBot). This is being initially based on the tutorial from Kirill Eremenko and Hadelin de Ponteves. Initially they engineered their model with TensorFlow 1.0. I will be updating the model along the way in light of updates and deprecated classes (TF 1.8/1.9) <br/>
 <br/>
 # Natural Language Processing (NLP)
 Natural Language Processing is a category of Machine/Deep Learning which is not merely limited in application to the engineering of chatbots. Some other examples are as follows: <br/>
@@ -20,7 +20,7 @@ Models which are DL models applied to NLP.
 
 # End-to-end Deep Learning Models 
 One neural network that takes care of everything from start to finish (running the whole show). <br/>
-
 <br/>
+
 # Seq2Seq
 Most cutting edge & powerful model right now for DNLP. 
