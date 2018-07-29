@@ -226,7 +226,7 @@ def decode_test_set(encoder_state, decoder_cell, decoder_embeddings_matrix, sos_
 
 
 # Creating the Decoder RNN 
-def decoder_rnn(decoder_embedded_inputs, decoder_embeddings_matrix, encoder_state, num_words, sequence_length, rnn_size, num_layers, word2int, keep_prob, batch_size):
+def decoder_rnn(decoder_embedded_input, decoder_embeddings_matrix, encoder_state, num_words, sequence_length, rnn_size, num_layers, word2int, keep_prob, batch_size):
     with tf.variable_scope('decoding') as decoding_scope:
         lstm = tf.contrib.rnn.BasicLSTMCell(rnn_size)
         # dropout regularization 
@@ -275,7 +275,7 @@ def seq2seq_model(inputs,targets,keep_prob,batch_size,sequence_length,answers_nu
     decoder_embeddings_matrix = tf.Variable(tf.random_uniform([questions_num_words+1,decoder_embedding_size], 0, 1))
     decoder_embedded_input = tf.nn.embedding_lookup(decoder_embeddings_matrix, preprocessed_targets)
     # training and test predictions 
-    training_predictions, test_predictions = decoder_rnn(decoder_embedded_inputs, 
+    training_predictions, test_predictions = decoder_rnn(decoder_embedded_input, 
                                                          decoder_embeddings_matrix, 
                                                          encoder_state, 
                                                          questions_num_words, 
@@ -286,5 +286,60 @@ def seq2seq_model(inputs,targets,keep_prob,batch_size,sequence_length,answers_nu
                                                          keep_prob,
                                                          batch_size)
     return training_predictions, test_predictions 
+
+
+# Training the Seq2Seq Model 
+    
+# Setting the Hyperparameters
+    
+epochs = 100 # one whole iteration of the training
+batch_size = 64 
+rnn_size = 512 
+num_layers = 3 #encoder & decoder RNN
+encoding_embedding_size = 512  #num of columns in embedding matrix
+decoding_embedding_size = 512 
+learning_rate = 0.01 
+learning_rate_decay = 0.9  # percentage reduced over iteration of training ~ 90% 
+min_learning_rate = 0.0001 
+keep_probability = 0.5 #based on Hinton article for optimal dropout 
+
+
+# Defining a TF session 
+tf.reset_default_graph()
+session = tf.InteractiveSession()
+
+# Load model inputs of seq2seq model 
+inputs, targets, lr, keep_prob = model_inputs()
+
+# Set sequence length 
+sequence_length = tf.placeholder_with_default(25, None, name='sequence_length') 
+
+# Getting shape of inputs tensor 
+input_shape = tf.shape(inputs)
+
+# Getting training and test predictions 
+training_predictions, test_predictions = seq2seq_model(tf.reverse(inputs, [-1]),
+                                                       targets,
+                                                       keep_prob,
+                                                       batch_size,
+                                                       sequence_length,
+                                                       len(answerswords2int),
+                                                       len(questionswords2int),
+                                                       encoding_embedding_size,
+                                                       decoding_embedding_size, 
+                                                       rnn_size,
+                                                       num_layers,
+                                                       questionswords2int)
+
+
+# Loss Error, Optimizer, Gradient Clipping 
+with tf.name_scope("optimization"):
+    loss_error = tf.contrib.seq2seq.sequence_loss(training_predictions, 
+                                                  targets,
+                                                  tf.ones([input_shape[0], sequence_length]))
+    optimizer = tf.train.AdamOptimizer(learning_rate)
+    gradients = optimizer.compute_gradients(loss_error) 
+    clipped_gradients = [(tf.clip_by_value(grad_tensor, -5., 5.), grad_variable) for grad_tensor, grad_variable in gradients if grad_tensor is not None]
+    optimizer_gradient_clipping = optimizer.apply_gradients(clipped_gradients)
 
 
