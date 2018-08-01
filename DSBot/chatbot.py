@@ -201,29 +201,26 @@ def decode_training_set(encoder_state, decoder_cell, decoder_embedded_input, seq
     return output_function(decoder_output_dropout)
     
 # Decode the test/validation set
-def decode_test_set(encoder_state, decoder_cell, decoder_embeddings_matrix, sos_id, eos_id, maximum_length, num_words, sequence_length, decoding_scope, output_function, keep_prob, batch_size):
-    attention_states = tf.zeros([batch_size,1,decoder_cell.output_size]) # initialize
-    attention_keys, attention_values, attention_score_function, attention_construct_function = tf.contrib.seq2seq.prepare_attention(attention_states, 
-                                                                                                                                    attention_option='bahdanau', 
-                                                                                                                                    num_units=decoder_cell.output_size)
-    test_decoder_function = tf.contrib.seq2seq.attention_decoder_fn_inference(output_function, 
+def decode_test_set(encoder_state, decoder_cell, decoder_embeddings_matrix, sos_id, eos_id, maximum_length, num_words, decoding_scope, output_function, keep_prob, batch_size):
+    attention_states = tf.zeros([batch_size, 1, decoder_cell.output_size])
+    attention_keys, attention_values, attention_score_function, attention_construct_function = tf.contrib.seq2seq.prepare_attention(attention_states, attention_option = "bahdanau", num_units = decoder_cell.output_size)
+    test_decoder_function = tf.contrib.seq2seq.attention_decoder_fn_inference(output_function,
                                                                               encoder_state[0],
                                                                               attention_keys,
                                                                               attention_values,
                                                                               attention_score_function,
                                                                               attention_construct_function,
-                                                                              decoder_embeddings_matrix, 
-                                                                              sos_id, 
-                                                                              eos_id, 
+                                                                              decoder_embeddings_matrix,
+                                                                              sos_id,
+                                                                              eos_id,
                                                                               maximum_length,
                                                                               num_words,
-                                                                              name='attn_dec_inf') #inference mode
+                                                                              name = "attn_dec_inf")
     test_predictions, decoder_final_state, decoder_final_context_state = tf.contrib.seq2seq.dynamic_rnn_decoder(decoder_cell,
-                                                                                                                test_decoder_function,                                                                                                       
+                                                                                                                test_decoder_function,
                                                                                                                 scope = decoding_scope)
-
     return test_predictions
-
+ 
 
 # Creating the Decoder RNN 
 def decoder_rnn(decoder_embedded_input, decoder_embeddings_matrix, encoder_state, num_words, sequence_length, rnn_size, num_layers, word2int, keep_prob, batch_size):
@@ -341,5 +338,97 @@ with tf.name_scope("optimization"):
     gradients = optimizer.compute_gradients(loss_error) 
     clipped_gradients = [(tf.clip_by_value(grad_tensor, -5., 5.), grad_variable) for grad_tensor, grad_variable in gradients if grad_tensor is not None]
     optimizer_gradient_clipping = optimizer.apply_gradients(clipped_gradients)
+
+# Pad Sequences with <PAD> token (equate length of question sentence with answer sentence)
+def apply_padding(batch_of_sequences,word2int):
+    max_sequence_length = max([len(sequence) for sequence in batch_of_sequences])
+    return [sequence + [word2int['<PAD>']] * (max_sequence_length - len(sequence)) for sequence in batch_of_sequences]
+
+
+# Split data into batches of questions and answers 
+def split_into_batches(questions, answers, batch_size):
+    for batch_index in range(0, len(questions)//batch_size): 
+        start_index = batch_index * batch_size # first index of questions adding to batch
+        questions_in_batch = questions[start_index : start_index + batch_size]
+        answers_in_batch = answers[start_index : start_index + batch_size]
+        padded_questions_in_batch = np.array(apply_padding(questions_in_batch, questionswords2int))
+        padded_answers_in_batch = np.array(apply_padding(answers_in_batch, answerswords2int)) 
+        yield padded_questions_in_batch, padded_answers_in_batch
+
+
+# Split questions & answers into training and validating data 
+training_validation_split = int(len(sorted_clean_questions) * 0.15)
+training_questions = sorted_clean_questions[training_validation_split:]
+training_answers = sorted_clean_answers[training_validation_split:]
+validation_questions = sorted_clean_questions[:training_validation_split]
+validation_answers = sorted_clean_answers[:training_validation_split]
+
+# Training 
+batch_index_check_training_loss = 100 # check training loss every 100 batches
+batch_index_check_validation_loss = ((len(training_questions)) // batch_size // 2) - 1 
+total_training_loss_error = 0 
+list_validation_loss_error = []
+early_stopping_check = 0 
+early_stopping_stop = 1000 
+checkpoint = "chatbot_weights.ckpt" 
+session.run(tf.global_variables_initializer())
+for epoch in range(1, epochs + 1):
+    for batch_index, (padded_questions_in_batch, padded_answers_in_batch) in enumerate(split_into_batches(training_questions, training_answers, batch_size)):
+        starting_time = time.time()
+        _, batch_training_loss_error = session.run([optimizer_gradient_clipping, loss_error], {inputs: padded_questions_in_batch,
+                                                                                               targets: padded_answers_in_batch,
+                                                                                               lr: learning_rate,
+                                                                                               sequence_length: padded_answers_in_batch.shape[1],
+                                                                                               keep_prob: keep_probability})
+        total_training_loss_error += batch_training_loss_error
+        ending_time = time.time()
+        batch_time = ending_time - starting_time
+        if batch_index % batch_index_check_training_loss == 0:
+            print('Epoch: {:>3}/{}, Batch: {:>4}/{}, Training Loss Error: {:>6.3f}, Training Time on 100 Batches: {:d} seconds'.format(epoch,
+                                                                                                                                       epochs,
+                                                                                                                                       batch_index,
+                                                                                                                                       len(training_questions) // batch_size,
+                                                                                                                                       total_training_loss_error / batch_index_check_training_loss,
+                                                                                                                                       int(batch_time * batch_index_check_training_loss)))
+            total_training_loss_error = 0
+        if batch_index % batch_index_check_validation_loss == 0 and batch_index > 0:
+            total_validation_loss_error = 0
+            starting_time = time.time()
+            for batch_index_validation, (padded_questions_in_batch, padded_answers_in_batch) in enumerate(split_into_batches(validation_questions, validation_answers, batch_size)):
+                batch_validation_loss_error = session.run(loss_error, {inputs: padded_questions_in_batch,
+                                                                       targets: padded_answers_in_batch,
+                                                                       lr: learning_rate,
+                                                                       sequence_length: padded_answers_in_batch.shape[1],
+                                                                       keep_prob: 1})
+                total_validation_loss_error += batch_validation_loss_error
+            ending_time = time.time()
+            batch_time = ending_time - starting_time
+            average_validation_loss_error = total_validation_loss_error / (len(validation_questions) / batch_size)
+            print('Validation Loss Error: {:>6.3f}, Batch Validation Time: {:d} seconds'.format(average_validation_loss_error, int(batch_time)))
+            learning_rate *= learning_rate_decay
+            if learning_rate < min_learning_rate:
+                learning_rate = min_learning_rate
+            list_validation_loss_error.append(average_validation_loss_error)
+            if average_validation_loss_error <= min(list_validation_loss_error):
+                print('I speak better now!!')
+                early_stopping_check = 0
+                saver = tf.train.Saver()
+                saver.save(session, checkpoint)
+            else:
+                print("Sorry I do not speak better, I need to practice more.")
+                early_stopping_check += 1
+                if early_stopping_check == early_stopping_stop:
+                    break
+    if early_stopping_check == early_stopping_stop:
+        print("My apologies, I cannot speak better anymore. This is the best I can do.")
+        break
+print("Game Over")
+
+
+
+
+
+
+
 
 
